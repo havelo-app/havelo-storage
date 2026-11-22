@@ -1,0 +1,49 @@
+# Local network over HTTPS through Caddy, with a real domain and an automatic
+# certificate every device already trusts.
+#
+#   HAVELO_DOMAIN=havelo.example.com docker compose up -d
+#   docker compose exec data-service node src/admin.js bootstrap https://havelo.example.com
+#
+# Point the domain's DNS at this machine. Caddy's default certificate check
+# needs ports 80 and 443 reachable from the internet; to keep the server local
+# only, build Caddy with your DNS provider's plugin and use its DNS challenge.
+# Only Caddy is published; the service is reachable from Caddy alone.
+name: havelo-storage
+services:
+  caddy:
+    image: caddy:2
+    environment:
+      HAVELO_DOMAIN: ${HAVELO_DOMAIN:?Set HAVELO_DOMAIN to your domain}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - data-service
+    restart: unless-stopped
+  data-service:
+    image: ghcr.io/havelo-app/havelo-storage:0.1.1
+    environment:
+      # Caddy forwards each client's address from this private network, so
+      # every device keeps its own rate-limit allowance.
+      TRUSTED_PROXIES: uniquelocal
+    volumes:
+      - havelo-data:/data
+      # Daily verified snapshots; copy this volume off-host.
+      - havelo-backups:/backups
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+volumes:
+  havelo-data:
+  havelo-backups:
+  caddy-data:
+  caddy-config:

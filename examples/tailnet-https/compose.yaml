@@ -1,0 +1,56 @@
+# Tailnet over HTTPS. A Tailscale container joins your tailnet as "havelo" and
+# serves https://havelo.your-tailnet.ts.net with a certificate every device
+# trusts. The service listens only inside that container's network, behind
+# Tailscale; nothing is published on this host.
+#
+#   TS_AUTHKEY=tskey-auth-... docker compose up -d
+#   docker compose exec data-service node src/admin.js bootstrap https://havelo.your-tailnet.ts.net
+#
+# Enable MagicDNS and HTTPS certificates in the Tailscale admin console and
+# create the auth key there. Devices need the Tailscale app. If Tailscale
+# already runs on this host, use ../local-http with `tailscale serve --bg 3210`
+# and TRUSTED_PROXIES=loopback instead.
+name: havelo-storage
+services:
+  tailscale:
+    image: tailscale/tailscale:stable
+    hostname: havelo
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY:?Set TS_AUTHKEY to a Tailscale auth key}
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_SERVE_CONFIG: /config/serve.json
+    volumes:
+      - tailscale-state:/var/lib/tailscale
+      - ./serve.json:/config/serve.json:ro
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - net_admin
+    restart: unless-stopped
+  data-service:
+    image: ghcr.io/havelo-app/havelo-storage:0.1.1
+    network_mode: service:tailscale
+    depends_on:
+      - tailscale
+    environment:
+      # Reachable only through Tailscale's HTTPS proxy on the same network.
+      HOST: 127.0.0.1
+      # The proxy forwards each client's address, so every device keeps its
+      # own rate-limit allowance.
+      TRUSTED_PROXIES: loopback
+    volumes:
+      - havelo-data:/data
+      # Daily verified snapshots; copy this volume off-host.
+      - havelo-backups:/backups
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+volumes:
+  havelo-data:
+  havelo-backups:
+  tailscale-state:

@@ -1,0 +1,47 @@
+# Tailnet over HTTP. A Tailscale container joins your tailnet as "havelo" and
+# the service shares its network, so only tailnet devices can reach it. Tailnet
+# traffic is always encrypted by Tailscale; nothing is published on this host.
+#
+#   TS_AUTHKEY=tskey-auth-... docker compose up -d
+#   docker compose exec data-service node src/admin.js bootstrap havelo.your-tailnet.ts.net
+#
+# Create the auth key in the Tailscale admin console. Devices need the Tailscale
+# app and connect to http://havelo.your-tailnet.ts.net:3210 (or the 100.x IP).
+# If Tailscale already runs on this host, use ../local-http and the host's
+# tailnet name or IP instead.
+name: havelo-storage
+services:
+  tailscale:
+    image: tailscale/tailscale:stable
+    hostname: havelo
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY:?Set TS_AUTHKEY to a Tailscale auth key}
+      TS_STATE_DIR: /var/lib/tailscale
+    volumes:
+      - tailscale-state:/var/lib/tailscale
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - net_admin
+    restart: unless-stopped
+  data-service:
+    image: ghcr.io/havelo-app/havelo-storage:0.1.1
+    network_mode: service:tailscale
+    depends_on:
+      - tailscale
+    volumes:
+      - havelo-data:/data
+      # Daily verified snapshots; copy this volume off-host.
+      - havelo-backups:/backups
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+volumes:
+  havelo-data:
+  havelo-backups:
+  tailscale-state:

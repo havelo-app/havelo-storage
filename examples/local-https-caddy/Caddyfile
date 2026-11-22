@@ -1,0 +1,3 @@
+{$HAVELO_DOMAIN} {
+	reverse_proxy data-service:3210
+}

@@ -1,0 +1,29 @@
+# Local network over plain HTTP, like a local Home Assistant connection.
+#
+#   docker compose up -d
+#   docker compose exec data-service node src/admin.js bootstrap 192.168.1.20
+#
+# Replace 192.168.1.20 with this machine's local IP (reserve it on your router).
+# Devices connect to http://192.168.1.20:3210, or just type 192.168.1.20.
+# Traffic isn't encrypted: use it on a network you trust.
+name: havelo-storage
+services:
+  data-service:
+    image: ghcr.io/havelo-app/havelo-storage:0.1.1
+    ports:
+      - "3210:3210"
+    volumes:
+      - havelo-data:/data
+      # Daily verified snapshots; copy this volume off-host.
+      - havelo-backups:/backups
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+volumes:
+  havelo-data:
+  havelo-backups:
